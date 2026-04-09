@@ -34,6 +34,7 @@ npm run build && npm start
 - **Start element selection mode** from the public API
 - **Run as a browser embed or Electron desktop overlay** using the same event bus
 - **Drive chat / AI workflows in Electron** with screen capture, MCP tooling, and TTS/STT services
+- **Use Codex with ChatGPT sign-in** for read-only screen guidance without an API key
 
 ## Script Tag Usage
 

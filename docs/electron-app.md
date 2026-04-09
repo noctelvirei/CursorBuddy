@@ -40,6 +40,7 @@ A frameless, transparent, always-on-top window that drops down from the tray ico
 
 - **Chat interface** — type messages or see voice transcripts
 - **Settings** — API keys, provider selection, model configuration
+- **Codex auth** — sign in with ChatGPT for the Codex chat provider
 - **MCP management** — connect to external tool servers
 - **Voice controls** — push-to-talk settings, TTS configuration
 - **Cursor customization** — color, size, glow, spring tuning
@@ -67,7 +68,7 @@ The full pipeline:
 2. Audio streams to STT provider (AssemblyAI, Deepgram, or OpenAI Whisper)
 3. Key release → final transcript
 4. Screenshot capture of all displays
-5. Transcript + screenshots sent to AI (Claude, GPT-4o, Ollama, or LM Studio)
+5. Transcript + screenshots sent to AI (Claude, Codex, GPT-4o, Ollama, or LM Studio)
 6. AI response streams back → overlay shows spinner → then responding state
 7. `[POINT:x,y:label]` tags parsed → cursor flies to the element
 8. TTS speaks the response aloud
@@ -97,6 +98,8 @@ Settings are persisted to `~/.cursorbuddy/settings.json`. This includes:
 - Extended thinking / reasoning configuration
 - MCP server connections
 - Voice and cursor preferences
+
+Codex sign-in state is managed by Codex itself and cached in the user's Codex auth store rather than inside CursorBuddy's settings file.
 
 ---
 

@@ -11,7 +11,9 @@
 
 const Anthropic = require("@anthropic-ai/sdk").default;
 const OpenAI = require("openai").default;
+const codexAppServer = require("./codex-app-server.js");
 const { extractToolResultText } = require("../lib/tool-result-text.js");
+const { parsePointingCoordinates } = require("../lib/point-parser.js");
 const log = require("../lib/session-logger.js");
 
 const SYSTEM_PROMPT = `you're cursorbuddy, a friendly always-on companion that lives in the user's menu bar. the user speaks to you via push-to-talk or types in the chat panel. you can see their screen(s) and any screenshots they've attached. your reply will be spoken aloud via text-to-speech AND displayed in a chat panel, so write conversationally. this is an ongoing conversation — you remember everything they've said before.
@@ -68,6 +70,7 @@ function addToHistory(userMessage, assistantMessage) {
 
 function clearHistory() {
   conversationHistory = [];
+  codexAppServer.clearThread().catch(() => {});
 }
 
 // ── SDK Client Cache ─────────────────────────────────────────
@@ -153,7 +156,7 @@ function buildAnthropicToolDefs(mcpTools) {
 /**
  * Run inference with the configured provider.
  * @param {object} opts
- * @param {string} opts.provider - 'anthropic'|'openai'|'ollama'|'lmstudio'
+ * @param {string} opts.provider - 'anthropic'|'openai'|'ollama'|'lmstudio'|'codex'
  * @param {string} opts.model - model name
  * @param {string} opts.transcript - user's message
  * @param {Array} opts.screens - screenshot data from capture service
@@ -167,6 +170,8 @@ async function runInference(opts) {
   switch (provider) {
     case "anthropic":
       return runAnthropicInference(model, transcript, screens, settings, onChunk, mcpTools);
+    case "codex":
+      return runCodexInference(transcript, screens, settings, onChunk);
     case "openai":
     case "ollama":
     case "lmstudio":
@@ -174,6 +179,25 @@ async function runInference(opts) {
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }
+}
+
+// ── Codex App Server ───────────────────────────────────────
+
+async function runCodexInference(transcript, screens, settings, onChunk) {
+  const fullText = await codexAppServer.runTurn({
+    transcript,
+    screens,
+    settings,
+    onChunk,
+  });
+
+  log.event("inference:complete", {
+    provider: "codex",
+    model: settings?.chatModel || "gpt-5.4",
+    responseLength: fullText.length,
+    hasPoint: fullText.includes("[POINT:"),
+  });
+  return fullText;
 }
 
 // ── Anthropic ─────────────────────────────────────────────
@@ -402,12 +426,22 @@ const CU_PROMPT = (userQuestion, assistantResponse) => {
  */
 async function runComputerUse(opts) {
   const { settings, onChunk } = opts;
-  const provider = settings.cuProvider || "anthropic";
+  const requestedProvider = settings.cuProvider || (settings.chatProvider === "codex" ? "codex" : "anthropic");
+  const provider = requestedProvider === "openai" && !settings.openaiKey && settings.chatProvider === "codex"
+    ? "codex"
+    : requestedProvider === "anthropic" && !settings.anthropicKey && settings.chatProvider === "codex"
+      ? "codex"
+      : requestedProvider;
+  const providerModel = provider === "codex"
+    ? (settings.cuModel || settings.chatModel || "gpt-5.4")
+    : settings.cuModel;
 
-  onChunk?.({ type: "tool_use", name: "computer_use", input: { provider, model: settings.cuModel } });
-  log.event("cu:start", { provider, model: settings.cuModel });
+  onChunk?.({ type: "tool_use", name: "computer_use", input: { provider, model: providerModel } });
+  log.event("cu:start", { provider, model: providerModel });
 
   switch (provider) {
+    case "codex":
+      return runCodexComputerUse(opts);
     case "anthropic":
       return runAnthropicComputerUse(opts);
     case "openai":
@@ -415,6 +449,33 @@ async function runComputerUse(opts) {
     default:
       throw new Error(`Unknown CU provider: ${provider}`);
   }
+}
+
+async function runCodexComputerUse(opts) {
+  const { userQuestion, assistantResponse, screenCapture, settings, onChunk } = opts;
+  const pointResponse = await codexAppServer.runPointFallback({
+    userQuestion,
+    assistantResponse,
+    screenCapture,
+    settings,
+  });
+  const parsed = parsePointingCoordinates(pointResponse);
+
+  if (!parsed.coordinate) {
+    const textResult = parsed.spokenText || "No element detected";
+    onChunk?.({ type: "tool_result", name: "computer_use", result: textResult.slice(0, 100) });
+    return { action: "none", text: textResult };
+  }
+
+  const calibratedPoint = screenshotPointToScreenCoords(parsed.coordinate.x, parsed.coordinate.y, screenCapture);
+  const result = {
+    action: "point",
+    coordinate: [Math.round(calibratedPoint.x), Math.round(calibratedPoint.y)],
+    pointCoordinate: [parsed.coordinate.x, parsed.coordinate.y],
+    label: parsed.elementLabel || "element",
+  };
+  onChunk?.({ type: "tool_result", name: "computer_use", result: `point at (${result.coordinate})` });
+  return result;
 }
 
 // ── Anthropic Computer Use (computer_20251124) ────────────

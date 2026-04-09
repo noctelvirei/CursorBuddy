@@ -9,11 +9,13 @@
  * Cross-platform: macOS, Windows, Linux.
  */
 
-const { app, BrowserWindow, Tray, Menu, screen, ipcMain, nativeImage, globalShortcut, clipboard } = require("electron");
+const { app, BrowserWindow, Tray, Menu, screen, ipcMain, nativeImage, globalShortcut, clipboard, shell } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
 const { captureAllScreens, screenshotPointToScreenCoords, setCalibration } = require("./services/capture.js");
 const { runInference, runComputerUse, clearHistory } = require("./services/inference.js");
+const codexAppServer = require("./services/codex-app-server.js");
 const mcpServer = require("./services/mcp-server.js");
 const transcription = require("./services/transcription.js");
 const tts = require("./services/tts.js");
@@ -25,6 +27,10 @@ const { sendToOverlay, sendToPanel, broadcast, setWindows, getOverlayWindow, get
 const { loadSettings, saveSettings } = require("./lib/settings-cache.js");
 const { parsePointingCoordinates } = require("./lib/point-parser.js");
 const log = require("./lib/session-logger.js");
+
+codexAppServer.on("auth-state", (state) => {
+  sendToPanel("codex:auth-state", state);
+});
 
 // ── Constants (must match design-tokens.ts) ───────────────────
 const VIEWPORT_WIDTH = 320;
@@ -116,7 +122,7 @@ function positionPanelNearTray(trayBounds) {
 // ── Windows ───────────────────────────────────────────────────
 
 function createOverlayWindow() {
-  const isDev = !app.isPackaged;
+  const distIndexPath = path.join(__dirname, "../dist/index.html");
   const overlayWindow = new BrowserWindow({
     width: VIEWPORT_WIDTH,
     height: VIEWPORT_HEIGHT,
@@ -137,11 +143,20 @@ function createOverlayWindow() {
   overlayWindow.setIgnoreMouseEvents(true);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setAlwaysOnTop(true, "screen-saver");
-  if (isDev) {
-    overlayWindow.loadURL("http://localhost:1420");
-  } else {
-    overlayWindow.loadFile(path.join(__dirname, "../dist/index.html"));
-  }
+  const fallbackToBuiltOverlay = () => {
+    if (overlayWindow.isDestroyed()) return;
+    if (fs.existsSync(distIndexPath)) {
+      overlayWindow.loadFile(distIndexPath).catch((err) => {
+        console.error("[Overlay] Failed to load built renderer:", err.message);
+      });
+    }
+  };
+  overlayWindow.webContents.once("did-fail-load", () => {
+    fallbackToBuiltOverlay();
+  });
+  overlayWindow.loadURL("http://localhost:1420").catch(() => {
+    fallbackToBuiltOverlay();
+  });
   overlayWindow.webContents.on("did-finish-load", () => broadcastScreenBounds());
   mcpServer.setOverlayWindow(overlayWindow);
   overlayWindow.on("closed", () => {
@@ -321,6 +336,24 @@ ipcMain.handle("capture-screens", async () => {
   }
 });
 
+// ── IPC: Codex Auth ───────────────────────────────────────
+
+ipcMain.handle("codex:auth-status", async () => {
+  return codexAppServer.refreshAuthState();
+});
+
+ipcMain.handle("codex:login", async () => {
+  const result = await codexAppServer.loginWithChatGPT();
+  if (result.authUrl) {
+    await shell.openExternal(result.authUrl);
+  }
+  return result;
+});
+
+ipcMain.handle("codex:logout", async () => {
+  return codexAppServer.logout();
+});
+
 // ── IPC: Inference ────────────────────────────────────────
 
 /** Last captured screens — kept so we can scale POINT coords after inference */
@@ -361,11 +394,14 @@ ipcMain.on("inference:run", async (_event, { transcript, provider, model, attach
     const cursorScreen = screens.find(s => s.isCursorScreen) || screens[0];
 
     // Gather all available tools (system actions + MCP client + pi-compatible)
-    const allTools = [
-      ...getSystemTools(),
-      ...mcpClient.getAllTools(),
-      ...toolLoader.getToolList(),
-    ];
+    const selectedProvider = provider || settings.chatProvider || "anthropic";
+    const allTools = selectedProvider === "codex"
+      ? []
+      : [
+          ...getSystemTools(),
+          ...mcpClient.getAllTools(),
+          ...toolLoader.getToolList(),
+        ];
 
     // Voice mode: synchronized TTS + text reveal + cursor pointing pipeline
     let voicePipeline = null;
@@ -411,7 +447,7 @@ ipcMain.on("inference:run", async (_event, { transcript, provider, model, attach
     }
 
     await runInference({
-      provider: provider || settings.chatProvider || "anthropic",
+      provider: selectedProvider,
       model: model || settings.chatModel || "claude-sonnet-4-6",
       transcript,
       screens,
@@ -474,7 +510,7 @@ ipcMain.on("inference:run", async (_event, { transcript, provider, model, attach
                     : cleanText;
                   chunk.scaledPoint = {
                     x: cuResult.coordinate[0], y: cuResult.coordinate[1],
-                    label: 'element', bubbleText,
+                    label: cuResult.label || 'element', bubbleText,
                   };
                 }
               } catch (cuErr) {
@@ -665,12 +701,15 @@ function getCLIVersion(binaryPath) {
 }
 
 ipcMain.handle("verify-cli", async (_event, binaryName) => {
+  if (binaryName === "codex") {
+    return codexAppServer.probeCLI();
+  }
   const result = await verifyCLIPath(binaryName);
   if (result.found && result.path) {
     const version = await getCLIVersion(result.path);
-    return { found: true, path: result.path, version };
+    return { found: true, path: result.path, version, source: "path" };
   }
-  return { found: false, path: null, version: null };
+  return { found: false, path: null, version: null, source: null };
 });
 
 // ── App Lifecycle ─────────────────────────────────────────────
@@ -862,16 +901,19 @@ function stopPushToTalk() {
         const screens = await captureAllScreens();
         const cursorScreen = screens.find(s => s.isCursorScreen) || screens[0];
         const currentSettings = loadSettings();
-        const allTools = [
-          ...getSystemTools(),
-          ...mcpClient.getAllTools(),
-          ...toolLoader.getToolList(),
-        ];
+        const selectedProvider = currentSettings.chatProvider || "anthropic";
+        const allTools = selectedProvider === "codex"
+          ? []
+          : [
+              ...getSystemTools(),
+              ...mcpClient.getAllTools(),
+              ...toolLoader.getToolList(),
+            ];
         let fullResponseText = "";
         let firstTextReceived = false;
 
         await runInference({
-          provider: currentSettings.chatProvider || "anthropic",
+          provider: selectedProvider,
           model: currentSettings.chatModel || "claude-sonnet-4-6",
           transcript: pttFinalTranscript,
           screens,

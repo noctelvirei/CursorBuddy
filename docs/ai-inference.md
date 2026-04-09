@@ -9,6 +9,7 @@ CursorBuddy connects to multiple AI providers for vision-enabled chat with strea
 | Provider | Models | Vision | Streaming | Tool Use | Local |
 |----------|--------|--------|-----------|----------|-------|
 | **Anthropic** | Claude Sonnet 4.6, Opus, Haiku | ✅ | ✅ | ✅ | ❌ |
+| **Codex** | GPT-5.4 | ✅ | ✅ | ❌ | ✅ |
 | **OpenAI** | GPT-4o, o3, o4-mini | ✅ | ✅ | ❌ | ❌ |
 | **Ollama** | LLaVA, any vision model | ✅* | ✅ | ❌ | ✅ |
 | **LM Studio** | Any vision model | ✅* | ✅ | ❌ | ✅ |
@@ -115,6 +116,37 @@ Temperature is removed for reasoning models (they don't use it).
 
 ---
 
+## Codex
+
+### Configuration
+
+```json
+{
+  "chatProvider": "codex",
+  "chatModel": "gpt-5.4"
+}
+```
+
+### Auth
+
+Codex uses **Sign in with ChatGPT** through the Codex App Server. No OpenAI API key is required for the CursorBuddy chat slot when Codex is selected.
+
+CursorBuddy starts a local Codex App Server client, checks auth state, and opens the ChatGPT login flow in the browser when needed. Codex manages token refresh internally.
+
+### Behavior
+
+- **Vision** — screenshots are sent as local image inputs to Codex
+- **Streaming** — agent message deltas stream back into the panel as they arrive
+- **Read-only** — CursorBuddy starts Codex with `approvalPolicy: "never"` and a read-only sandbox
+- **No external tool injection** — CursorBuddy does not pass MCP tools, custom tools, or system action tools to Codex in v1
+- **Same pointing contract** — Codex replies still use the existing `[POINT:x,y:label]` format
+
+### Conversation state
+
+Codex keeps an in-memory thread for the current app session so follow-up messages stay conversational. Clearing chat resets the active Codex thread.
+
+---
+
 ## Ollama (Local)
 
 ### Configuration
@@ -149,12 +181,14 @@ Same OpenAI-compatible interface as Ollama.
 
 ## Conversation History
 
-The main process maintains conversation history (up to 10 turns). Each turn stores the user's transcript and the assistant's full response. History is included with every new message so the AI has context.
+For Anthropic, OpenAI, Ollama, and LM Studio, the main process maintains conversation history (up to 10 turns). Each turn stores the user's transcript and the assistant's full response. History is included with every new message so the AI has context.
 
 ```ts
 // Clear history programmatically
 ipcMain.on('inference:clear-history', () => clearHistory());
 ```
+
+When Codex is selected, CursorBuddy clears the active Codex thread alongside the local history cache.
 
 ---
 

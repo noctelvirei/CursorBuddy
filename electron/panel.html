@@ -282,7 +282,7 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
         <h3>Secrets</h3>
         <p class="desc">Stored in ~/.cursorbuddy/settings.json. Auto-saved on change.</p>
         <div class="field"><div class="field-label">Anthropic <span class="hint">— Claude chat, vision, computer use</span></div><div class="key-row"><input type="password" id="key-anthropic" placeholder="sk-ant-..." data-key="anthropicKey" oninput="saveKey(this)"><button class="eye-btn" onclick="toggleKeyVis(this)"><i class="icon-eye-off"></i></button></div></div>
-        <div class="field"><div class="field-label">OpenAI <span class="hint">— Whisper STT, GPT, Codex, computer use</span></div><div class="key-row"><input type="password" id="key-openai" placeholder="sk-..." data-key="openaiKey" oninput="saveKey(this)"><button class="eye-btn" onclick="toggleKeyVis(this)"><i class="icon-eye-off"></i></button></div></div>
+        <div class="field"><div class="field-label">OpenAI <span class="hint">— Whisper STT, GPT, computer use</span></div><div class="key-row"><input type="password" id="key-openai" placeholder="sk-..." data-key="openaiKey" oninput="saveKey(this)"><button class="eye-btn" onclick="toggleKeyVis(this)"><i class="icon-eye-off"></i></button></div></div>
         <div class="field"><div class="field-label">ElevenLabs <span class="hint">— Text-to-speech</span></div><div class="key-row"><input type="password" id="key-elevenlabs" placeholder="xi-..." data-key="elevenlabsKey" oninput="saveKey(this)"><button class="eye-btn" onclick="toggleKeyVis(this)"><i class="icon-eye-off"></i></button></div></div>
         <div class="field"><div class="field-label">Cartesia <span class="hint">— Sonic TTS (ultra-low latency)</span></div><div class="key-row"><input type="password" id="key-cartesia" placeholder="sk-..." data-key="cartesiaKey" oninput="saveKey(this)"><button class="eye-btn" onclick="toggleKeyVis(this)"><i class="icon-eye-off"></i></button></div></div>
         <div class="field"><div class="field-label">Deepgram <span class="hint">— Streaming STT with VAD</span></div><div class="key-row"><input type="password" id="key-deepgram" placeholder="dg-..." data-key="deepgramKey" oninput="saveKey(this)"><button class="eye-btn" onclick="toggleKeyVis(this)"><i class="icon-eye-off"></i></button></div></div>
@@ -300,6 +300,18 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
           <select id="chat-provider" onchange="slotProviderChanged('chat')" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:0.6rem;padding:0.5rem 0.75rem;color:#ECEEED;font-size:0.9rem;outline:none"></select>
           <select id="chat-model" onchange="slotModelChanged('chat')" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:0.6rem;padding:0.5rem 0.75rem;color:#ECEEED;font-size:0.9rem;outline:none;margin-top:8px"></select>
           <div id="chat-reasoning" class="reasoning-toggle"></div>
+          <div id="chat-codex-auth" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:0.6rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:0.85rem;color:#e2e8f0">Codex ChatGPT auth</div>
+                <div id="codex-auth-status" style="font-size:0.77rem;color:#6B736F;margin-top:2px">Checking Codex sign-in…</div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn" id="codex-login-btn" onclick="codexSignIn()" style="flex:none;min-width:120px">Sign in with ChatGPT</button>
+                <button class="btn" id="codex-logout-btn" onclick="codexSignOut()" style="flex:none;min-width:80px">Sign out</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="divider"></div>
 
@@ -651,6 +663,15 @@ const api = window.panelAPI;
 let settings = {};
 let screenBounds = {x:0,y:0,width:1440,height:900};
 let audioSimInterval = null;
+let codexAuthState = {
+  authMode: null,
+  accountType: null,
+  email: null,
+  planType: null,
+  isAuthenticated: false,
+  requiresOpenaiAuth: true,
+  error: null,
+};
 
 // ── Platform-aware shortcut labels ───────────────────────
 const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
@@ -713,6 +734,7 @@ async function loadAllSettings() {
     document.documentElement.style.fontSize = (13 * settings.displayScale / 100) + 'px';
   }
   buildAllModelSlots();
+  await refreshCodexAuthStatus();
 
   // Set platform-aware shortcut labels
   const pttEl = document.getElementById('shortcut-ptt');
@@ -731,6 +753,83 @@ async function loadAllSettings() {
 function persistSettings() {
   clearTimeout(saveDebounce);
   saveDebounce = setTimeout(() => api.saveSettings(settings), 300);
+}
+
+async function refreshCodexAuthStatus() {
+  try {
+    codexAuthState = await api.getCodexAuthStatus();
+  } catch (err) {
+    codexAuthState = {
+      ...codexAuthState,
+      isAuthenticated: false,
+      error: err.message || 'Codex auth check failed',
+    };
+  }
+  renderCodexAuthUI();
+}
+
+function renderCodexAuthUI() {
+  const box = document.getElementById('chat-codex-auth');
+  const status = document.getElementById('codex-auth-status');
+  const loginBtn = document.getElementById('codex-login-btn');
+  const logoutBtn = document.getElementById('codex-logout-btn');
+  if (!box || !status || !loginBtn || !logoutBtn) return;
+
+  const enabled = (settings.chatProvider || 'anthropic') === 'codex';
+  box.style.display = enabled ? 'block' : 'none';
+  if (!enabled) return;
+
+  if (codexAuthState.error) {
+    status.textContent = codexAuthState.error;
+    status.style.color = '#f87171';
+  } else if (codexAuthState.isAuthenticated) {
+    const bits = ['Signed in'];
+    if (codexAuthState.email) bits.push(codexAuthState.email);
+    if (codexAuthState.planType) bits.push(codexAuthState.planType);
+    status.textContent = bits.join(' · ');
+    status.style.color = '#22c55e';
+  } else {
+    status.textContent = 'Not signed in. CursorBuddy will block chat sends until Codex is connected.';
+    status.style.color = '#f59e0b';
+  }
+
+  loginBtn.disabled = codexAuthState.isAuthenticated;
+  logoutBtn.disabled = !codexAuthState.isAuthenticated;
+}
+
+async function codexSignIn() {
+  const status = document.getElementById('codex-auth-status');
+  try {
+    status.textContent = 'Opening browser login…';
+    status.style.color = '#60a5fa';
+    await api.loginCodex();
+  } catch (err) {
+    codexAuthState = {
+      ...codexAuthState,
+      isAuthenticated: false,
+      error: err.message || 'Codex login failed',
+    };
+    renderCodexAuthUI();
+  }
+}
+
+async function codexSignOut() {
+  try {
+    codexAuthState = await api.logoutCodex();
+  } catch (err) {
+    codexAuthState = {
+      ...codexAuthState,
+      error: err.message || 'Codex logout failed',
+    };
+  }
+  renderCodexAuthUI();
+}
+
+if (api.onCodexAuthState) {
+  api.onCodexAuthState((state) => {
+    codexAuthState = state;
+    renderCodexAuthUI();
+  });
 }
 
 function saveKey(el) {
@@ -1052,6 +1151,13 @@ function loadGoogleFont(fontVal) {
 }
 
 // ── Model system (provider→model dropdowns) ──────────────────
+const CHAT_PROVIDERS = {
+  anthropic: { name:'Anthropic', models:['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-3-5'] },
+  codex:     { name:'Codex',     models:['gpt-5.4'] },
+  openai:    { name:'OpenAI',    models:['gpt-4o','gpt-4o-mini','o3','o4-mini'] },
+  ollama:    { name:'Ollama',    models:[] },
+  lmstudio:  { name:'LM Studio', models:[] },
+};
 const PROVIDERS = {
   anthropic: { name:'Anthropic', models:['claude-sonnet-4-6','claude-opus-4-6','claude-haiku-3-5'] },
   openai:    { name:'OpenAI',    models:['gpt-4o','gpt-4o-mini','o3','o4-mini'] },
@@ -1059,6 +1165,7 @@ const PROVIDERS = {
   lmstudio:  { name:'LM Studio', models:[] },
 };
 const CU_PROVIDERS = {
+  codex:     { name:'Codex',     models:['gpt-5.4'] },
   anthropic: { name:'Anthropic', models:['claude-sonnet-4-6','claude-opus-4-6','claude-opus-4-5'] },
   openai:    { name:'OpenAI',    models:['computer-use-preview'] },
 };
@@ -1072,10 +1179,16 @@ function buildAllModelSlots() {
   SLOTS.forEach(s => { populateProviderDropdown(s); buildReasoningToggle(s); });
 }
 
+function getProviderMap(slotId) {
+  if (slotId === 'cu') return CU_PROVIDERS;
+  if (slotId === 'chat') return CHAT_PROVIDERS;
+  return PROVIDERS;
+}
+
 function populateProviderDropdown(slotId) {
   const provSel = document.getElementById(slotId + '-provider');
   if (!provSel) return;
-  const provMap = slotId === 'cu' ? CU_PROVIDERS : PROVIDERS;
+  const provMap = getProviderMap(slotId);
   const saved = settings[slotId + 'Provider'] || Object.keys(provMap)[0];
   provSel.innerHTML = '';
   for (const [pid, p] of Object.entries(provMap)) {
@@ -1085,22 +1198,24 @@ function populateProviderDropdown(slotId) {
     provSel.appendChild(opt);
   }
   populateModelDropdown(slotId, saved);
+  if (slotId === 'chat') renderCodexAuthUI();
 }
 
 function populateModelDropdown(slotId, providerId) {
   const modSel = document.getElementById(slotId + '-model');
   if (!modSel) return;
-  const provMap = slotId === 'cu' ? CU_PROVIDERS : PROVIDERS;
+  const provMap = getProviderMap(slotId);
   const models = provMap[providerId]?.models || [];
   const saved = settings[slotId + 'Model'];
+  const selectedModel = models.includes(saved) ? saved : models[0];
   modSel.innerHTML = '';
   models.forEach(m => {
     const opt = document.createElement('option');
     opt.value = m; opt.textContent = m;
-    if (m === saved) opt.selected = true;
+    if (m === selectedModel) opt.selected = true;
     modSel.appendChild(opt);
   });
-  if (!saved && models.length) settings[slotId + 'Model'] = models[0];
+  if (selectedModel) settings[slotId + 'Model'] = selectedModel;
 }
 
 function slotProviderChanged(slotId) {
@@ -1108,6 +1223,7 @@ function slotProviderChanged(slotId) {
   settings[slotId + 'Provider'] = pid;
   populateModelDropdown(slotId, pid);
   persistSettings();
+  if (slotId === 'chat') renderCodexAuthUI();
 }
 
 function slotModelChanged(slotId) {
@@ -1168,7 +1284,10 @@ async function checkCLI(name, elId) {
     const result = await api.verifyCLI(name);
     if (result.found) {
       dot.className = 'dot ok';
-      detail.textContent = result.path + (result.version ? ' · ' + result.version : '');
+      const suffix = result.version ? ' · ' + result.version : '';
+      detail.textContent = result.source === 'fallback'
+        ? result.path + ' · available via fallback' + suffix
+        : result.path + suffix;
     } else {
       dot.className = 'dot missing';
       detail.textContent = 'not found in PATH';
@@ -1614,6 +1733,10 @@ function chatSend() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
+  if ((settings.chatProvider || 'anthropic') === 'codex' && !codexAuthState.isAuthenticated) {
+    appendChatMsg('system', 'Codex is not signed in yet. Open the Models tab and use Sign in with ChatGPT.');
+    return;
+  }
   input.value = '';
 
   // Interrupt anything in progress

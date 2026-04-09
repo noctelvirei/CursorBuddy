@@ -36,6 +36,16 @@ contextBridge.exposeInMainWorld("panelAPI", {
   },
   clearHistory: () => ipcRenderer.send("inference:clear-history"),
 
+  // Codex auth
+  getCodexAuthStatus: () => ipcRenderer.invoke("codex:auth-status"),
+  loginCodex: () => ipcRenderer.invoke("codex:login"),
+  logoutCodex: () => ipcRenderer.invoke("codex:logout"),
+  onCodexAuthState: (callback) => {
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on("codex:auth-state", handler);
+    return () => ipcRenderer.removeListener("codex:auth-state", handler);
+  },
+
   // STT (speech-to-text)
   startSTT: (provider) => ipcRenderer.invoke("stt:start", provider),
   sendAudio: (pcm16ArrayBuffer) => ipcRenderer.send("stt:audio", pcm16ArrayBuffer),
