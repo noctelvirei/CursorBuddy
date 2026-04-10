@@ -47,6 +47,11 @@ const LOCAL_BUDDY_Y = 40;
 const PANEL_WIDTH = 680;
 const PANEL_HEIGHT = 580;
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 let tray = null;
 let isFollowingCursor = true;
 let cursorTrackingInterval = null;
@@ -728,6 +733,17 @@ ipcMain.handle("verify-cli", async (_event, binaryName) => {
 // ── App Lifecycle ─────────────────────────────────────────────
 
 app.on("before-quit", () => { app.isQuitting = true; log.event("app:quit"); log.close(); });
+
+app.on("second-instance", () => {
+  const panelWindow = getPanelWindow();
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    if (panelWindow.isMinimized()) panelWindow.restore();
+    panelWindow.show();
+    panelWindow.focus();
+  } else if (tray) {
+    togglePanel(tray.getBounds());
+  }
+});
 
 app.whenReady().then(() => {
   if (process.platform === "darwin") app.dock.hide();
