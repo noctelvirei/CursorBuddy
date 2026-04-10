@@ -123,6 +123,7 @@ function positionPanelNearTray(trayBounds) {
 
 function createOverlayWindow() {
   const distIndexPath = path.join(__dirname, "../dist/index.html");
+  const devServerUrl = process.env.CURSORBUDDY_DEV_URL || "http://localhost:1420";
   const overlayWindow = new BrowserWindow({
     width: VIEWPORT_WIDTH,
     height: VIEWPORT_HEIGHT,
@@ -143,20 +144,26 @@ function createOverlayWindow() {
   overlayWindow.setIgnoreMouseEvents(true);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setAlwaysOnTop(true, "screen-saver");
-  const fallbackToBuiltOverlay = () => {
+  const loadBuiltOverlay = () => {
     if (overlayWindow.isDestroyed()) return;
     if (fs.existsSync(distIndexPath)) {
       overlayWindow.loadFile(distIndexPath).catch((err) => {
         console.error("[Overlay] Failed to load built renderer:", err.message);
       });
+      return true;
     }
+    return false;
   };
-  overlayWindow.webContents.once("did-fail-load", () => {
-    fallbackToBuiltOverlay();
-  });
-  overlayWindow.loadURL("http://localhost:1420").catch(() => {
-    fallbackToBuiltOverlay();
-  });
+  const loadDevOverlay = () => {
+    overlayWindow.webContents.once("did-fail-load", () => loadBuiltOverlay());
+    overlayWindow.loadURL(devServerUrl).catch(() => loadBuiltOverlay());
+  };
+  if (!process.env.CURSORBUDDY_DEV_URL && loadBuiltOverlay()) {
+    log.event("overlay:load", { source: "dist", path: distIndexPath });
+  } else {
+    log.event("overlay:load", { source: "dev", url: devServerUrl });
+    loadDevOverlay();
+  }
   overlayWindow.webContents.on("did-finish-load", () => broadcastScreenBounds());
   mcpServer.setOverlayWindow(overlayWindow);
   overlayWindow.on("closed", () => {
