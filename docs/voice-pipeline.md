@@ -58,6 +58,8 @@ CursorBuddy supports local and online STT backends, configurable in settings:
 - **Behavior:** Buffers all audio during push-to-talk, transcribes locally on release, returns final transcript
 - **Requires:** Python with `faster-whisper` installed (`pip install faster-whisper`)
 - **Settings:** Python executable, model, device, compute type, optional language. Defaults to CPU + int8 for reliable local startup.
+- **Runtime presets:** CPU safe uses `device=cpu` + `compute_type=int8`; NVIDIA CUDA uses `device=cuda` + `compute_type=float16`.
+- **GPU requirement:** Faster Whisper uses CTranslate2. CUDA mode requires NVIDIA cuBLAS for CUDA 12 and cuDNN 9 to be available on the process `PATH`.
 
 ### Apple Speech
 

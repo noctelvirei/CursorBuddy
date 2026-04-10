@@ -117,6 +117,11 @@ input[type="text"]::placeholder,input[type="password"]::placeholder{color:#3a413
 .option-card .name{font-size:0.9rem;font-weight:500}
 .option-card .sub{font-size:0.77rem;color:#6B736F;margin-top:0.15rem}
 .option-card .check{color:#22c55e;font-size:1rem;float:right;margin-top:0.15rem}
+.preset-row{display:grid;grid-template-columns:1fr 1fr;gap:0.45rem;margin-bottom:0.75rem}
+.preset-btn{padding:0.5rem 0.65rem;border-radius:0.55rem;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);color:#ADB5B2;text-align:left;font-size:0.78rem;cursor:pointer;transition:all 0.12s}
+.preset-btn:hover{background:rgba(255,255,255,0.045);color:#ECEEED}
+.preset-btn.active{background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.28);color:#ECEEED}
+.preset-btn span{display:block;font-size:0.68rem;color:#6B736F;margin-top:0.1rem}
 .tab-page::-webkit-scrollbar{width:4px}
 .tab-page::-webkit-scrollbar-track{background:transparent}
 .tab-page::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
@@ -414,6 +419,13 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
           <div class="section-label">Faster Whisper Local Settings</div>
           <div class="field"><div class="field-label">Python executable <span class="hint">— python, py, or full path</span></div><input type="text" id="localWhisperPython" placeholder="python" data-key="localWhisperPython" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Model <span class="hint">— size or local model path</span></div><input type="text" id="localWhisperModel" placeholder="base" data-key="localWhisperModel" oninput="saveKey(this)"></div>
+          <div class="field">
+            <div class="field-label">Runtime preset <span class="hint">— choose compatibility or NVIDIA GPU</span></div>
+            <div class="preset-row">
+              <button class="preset-btn" id="whisper-preset-cpu" onclick="applyWhisperPreset('cpu','int8')">CPU safe<span>Works everywhere, slower</span></button>
+              <button class="preset-btn" id="whisper-preset-cuda" onclick="applyWhisperPreset('cuda','float16')">NVIDIA CUDA<span>Fast on RTX, needs CUDA/cuDNN</span></button>
+            </div>
+          </div>
           <div class="field"><div class="field-label">Device <span class="hint">— cpu, cuda, auto</span></div><input type="text" id="localWhisperDevice" placeholder="cpu" data-key="localWhisperDevice" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Compute type <span class="hint">— int8, float16, default</span></div><input type="text" id="localWhisperComputeType" placeholder="int8" data-key="localWhisperComputeType" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Language <span class="hint">— optional, e.g. en</span></div><input type="text" id="localWhisperLanguage" placeholder="auto detect" data-key="localWhisperLanguage" oninput="saveKey(this)"></div>
@@ -747,6 +759,7 @@ async function loadAllSettings() {
   // Provider selections
   if (settings.sttProvider) selectSTTByValue(settings.sttProvider);
   if (settings.ttsProvider) selectTTSByValue(settings.ttsProvider);
+  syncWhisperPresetButtons();
   if (settings.cursorColor) {
     document.getElementById('cursorColorPicker').value = settings.cursorColor;
   }
@@ -864,7 +877,30 @@ function saveKey(el) {
     document.getElementById('cursorColorPicker').value = el.value;
     send('config:update', { cursorColor: el.value });
   }
+  if (el.dataset.key === 'localWhisperDevice' || el.dataset.key === 'localWhisperComputeType') {
+    syncWhisperPresetButtons();
+  }
   persistSettings();
+}
+
+function applyWhisperPreset(device, computeType) {
+  settings.localWhisperDevice = device;
+  settings.localWhisperComputeType = computeType;
+  const deviceInput = document.getElementById('localWhisperDevice');
+  const computeInput = document.getElementById('localWhisperComputeType');
+  if (deviceInput) deviceInput.value = device;
+  if (computeInput) computeInput.value = computeType;
+  syncWhisperPresetButtons();
+  persistSettings();
+}
+
+function syncWhisperPresetButtons() {
+  const device = (settings.localWhisperDevice || 'cpu').toLowerCase();
+  const computeType = (settings.localWhisperComputeType || 'int8').toLowerCase();
+  const cpuBtn = document.getElementById('whisper-preset-cpu');
+  const cudaBtn = document.getElementById('whisper-preset-cuda');
+  cpuBtn?.classList.toggle('active', device === 'cpu' && computeType === 'int8');
+  cudaBtn?.classList.toggle('active', device === 'cuda' && computeType === 'float16');
 }
 
 // ── Shortcut capture ──────────────────────────────────────
