@@ -1,7 +1,7 @@
 /**
  * Transcription Service
  *
- * Streaming speech-to-text via AssemblyAI, Deepgram, or OpenAI Whisper.
+ * Speech-to-text via AssemblyAI, Deepgram, OpenAI Whisper, or local Faster Whisper.
  * Runs in the Electron main process. Receives PCM16 audio from the
  * renderer via IPC, streams to the provider's WebSocket, returns
  * transcript updates.
@@ -10,6 +10,10 @@
  */
 
 const WebSocket = require("ws");
+const { execFile } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 let activeSession = null;
 
@@ -198,14 +202,102 @@ class OpenAIWhisperSession {
       const text = data.text || "";
       this.onTranscript(text);
       this.onFinal(text);
+      return text;
     } catch (err) {
       this.onError(err);
+      throw err;
     }
   }
 
   stop() {
     this.audioChunks = [];
   }
+}
+
+// ── Local Faster Whisper (upload-style, offline) ──────────
+
+class LocalFasterWhisperSession {
+  constructor(settings, onTranscript, onFinal, onError) {
+    this.settings = settings || {};
+    this.onTranscript = onTranscript;
+    this.onFinal = onFinal;
+    this.onError = onError;
+    this.audioChunks = [];
+  }
+
+  async start() {
+    this.audioChunks = [];
+  }
+
+  sendAudio(pcm16Buffer) {
+    this.audioChunks.push(Buffer.from(pcm16Buffer));
+  }
+
+  async requestFinal() {
+    if (this.audioChunks.length === 0) return;
+
+    const pcmData = Buffer.concat(this.audioChunks);
+    this.audioChunks = [];
+    const wavBuffer = buildWAV(pcmData, 16000, 1, 16);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cursorbuddy-whisper-"));
+    const wavPath = path.join(tempDir, "audio.wav");
+    fs.writeFileSync(wavPath, wavBuffer);
+
+    try {
+      const text = await runFasterWhisper(wavPath, this.settings);
+      this.onTranscript(text);
+      this.onFinal(text);
+      return text;
+    } catch (err) {
+      this.onError(err);
+      throw err;
+    } finally {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (_) {}
+    }
+  }
+
+  stop() {
+    this.audioChunks = [];
+  }
+}
+
+function runFasterWhisper(wavPath, settings) {
+  const python = settings.localWhisperPython || "python";
+  const scriptPath = path.join(__dirname, "local-faster-whisper.py");
+  const args = [
+    scriptPath,
+    "--audio", wavPath,
+    "--model", settings.localWhisperModel || "base",
+    "--device", settings.localWhisperDevice || "auto",
+    "--compute-type", settings.localWhisperComputeType || "default",
+  ];
+  if (settings.localWhisperLanguage) {
+    args.push("--language", settings.localWhisperLanguage);
+  }
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      python,
+      args,
+      { timeout: Number(settings.localWhisperTimeoutMs) || 120000, windowsHide: true },
+      (error, stdout, stderr) => {
+        let payload = null;
+        try {
+          payload = JSON.parse((stdout || "").trim());
+        } catch (_) {}
+
+        if (payload?.ok) {
+          resolve(payload.text || "");
+          return;
+        }
+
+        const message = payload?.error || stderr?.trim() || error?.message || "Faster Whisper failed";
+        reject(new Error(message));
+      }
+    );
+  });
 }
 
 function buildWAV(pcmData, sampleRate, channels, bitsPerSample) {
@@ -243,6 +335,9 @@ function startSession(provider, settings, onTranscript, onFinal, onError) {
     case "openai":
       activeSession = new OpenAIWhisperSession(settings.openaiKey, onTranscript, onFinal, onError);
       break;
+    case "faster-whisper":
+      activeSession = new LocalFasterWhisperSession(settings, onTranscript, onFinal, onError);
+      break;
     case "apple":
       // Handled in renderer via webkitSpeechRecognition
       return null;
@@ -258,7 +353,7 @@ function sendAudio(pcm16Buffer) {
 }
 
 function requestFinal() {
-  activeSession?.requestFinal();
+  return activeSession?.requestFinal();
 }
 
 function stopSession() {

@@ -65,7 +65,7 @@ Press the shortcut to start recording. The overlay switches to the listening sta
 
 The full pipeline:
 1. Push-to-talk activates → overlay shows waveform
-2. Audio streams to STT provider (AssemblyAI, Deepgram, or OpenAI Whisper)
+2. Audio streams to STT provider (AssemblyAI, Deepgram, OpenAI Whisper, or local Faster Whisper)
 3. Key release → final transcript
 4. Screenshot capture of all displays
 5. Transcript + screenshots sent to AI (Claude, Codex, GPT-4o, Ollama, or LM Studio)
@@ -93,6 +93,7 @@ This means the AI can see and discuss screenshots you take outside the app.
 Settings are persisted to `~/.cursorbuddy/settings.json`. This includes:
 
 - API keys (Anthropic, OpenAI, ElevenLabs, Cartesia, AssemblyAI, Deepgram)
+- Local voice backend paths (Faster Whisper Python/model settings and Piper executable/model settings)
 - Provider selections (chat, STT, TTS)
 - Model choices
 - Extended thinking / reasoning configuration

@@ -152,19 +152,23 @@ class CodexAppServerClient extends EventEmitter {
 
     for (const spec of this.getCLIProbeSpecs()) {
       const result = await new Promise((resolve) => {
-        execFile(spec.command, spec.args, { timeout: 5000, windowsHide: true }, (error, stdout, stderr) => {
-          if (error) {
-            resolve(null);
-            return;
-          }
-          const text = (stdout || stderr || "").trim().split(/\r?\n/)[0] || null;
-          resolve({
-            found: true,
-            path: spec.command,
-            version: text,
-            source: spec.source,
+        try {
+          execFile(spec.command, spec.args, { timeout: 5000, windowsHide: true }, (error, stdout, stderr) => {
+            if (error) {
+              resolve(null);
+              return;
+            }
+            const text = (stdout || stderr || "").trim().split(/\r?\n/)[0] || null;
+            resolve({
+              found: true,
+              path: spec.command,
+              version: text,
+              source: spec.source,
+            });
           });
-        });
+        } catch (_) {
+          resolve(null);
+        }
       });
 
       if (result) return result;

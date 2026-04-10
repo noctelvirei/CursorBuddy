@@ -398,11 +398,25 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
             <div class="name">Deepgram</div>
             <div class="sub">Streaming with built-in VAD. Requires Deepgram key.</div>
           </div>
+          <div class="option-card" data-stt="faster-whisper" onclick="selectSTT(this)">
+            <span class="check" style="display:none">✓</span>
+            <div class="name">Faster Whisper (local)</div>
+            <div class="sub">Offline transcription via Python faster-whisper. No API key.</div>
+          </div>
           <div class="option-card" data-stt="apple" onclick="selectSTT(this)">
             <span class="check" style="display:none">✓</span>
             <div class="name">Apple Speech (offline)</div>
             <div class="sub">On-device. No API key. Privacy-friendly.</div>
           </div>
+        </div>
+        <div class="divider"></div>
+        <div class="section">
+          <div class="section-label">Faster Whisper Local Settings</div>
+          <div class="field"><div class="field-label">Python executable <span class="hint">— python, py, or full path</span></div><input type="text" id="localWhisperPython" placeholder="python" data-key="localWhisperPython" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Model <span class="hint">— size or local model path</span></div><input type="text" id="localWhisperModel" placeholder="base" data-key="localWhisperModel" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Device <span class="hint">— auto, cpu, cuda</span></div><input type="text" id="localWhisperDevice" placeholder="auto" data-key="localWhisperDevice" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Compute type <span class="hint">— default, int8, float16</span></div><input type="text" id="localWhisperComputeType" placeholder="default" data-key="localWhisperComputeType" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Language <span class="hint">— optional, e.g. en</span></div><input type="text" id="localWhisperLanguage" placeholder="auto detect" data-key="localWhisperLanguage" oninput="saveKey(this)"></div>
         </div>
         <div class="divider"></div>
         <div class="section">
@@ -441,11 +455,23 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
             <div class="name">Cartesia (Sonic)</div>
             <div class="sub">Real-time ultra-low latency. Requires Cartesia key.</div>
           </div>
+          <div class="option-card" data-tts="piper" onclick="selectTTS(this)">
+            <span class="check" style="display:none">✓</span>
+            <div class="name">Piper (local)</div>
+            <div class="sub">Offline TTS via Piper CLI. No API key.</div>
+          </div>
         </div>
         <div class="divider"></div>
         <div class="field">
           <div class="field-label">Voice ID</div>
           <input type="text" id="voiceId" placeholder="21m00Tcm4TlvDq8ikWAM" data-key="voiceId" oninput="saveKey(this)">
+        </div>
+        <div class="section">
+          <div class="section-label">Piper Local Settings</div>
+          <div class="field"><div class="field-label">Piper executable <span class="hint">— piper or full path</span></div><input type="text" id="localPiperExecutable" placeholder="piper" data-key="localPiperExecutable" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Model path <span class="hint">— .onnx voice model</span></div><input type="text" id="localPiperModel" placeholder="C:\\voices\\en_US-lessac-medium.onnx" data-key="localPiperModel" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Config path <span class="hint">— optional .json</span></div><input type="text" id="localPiperConfig" placeholder="auto from model" data-key="localPiperConfig" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Speaker <span class="hint">— optional speaker id</span></div><input type="text" id="localPiperSpeaker" placeholder="default" data-key="localPiperSpeaker" oninput="saveKey(this)"></div>
         </div>
         <div class="slider-row">
           <label>Speed</label>
@@ -2051,15 +2077,22 @@ async function toggleMic() {
 
     // Stop mic capture, request final transcript
     stopMicCapture();
-    api.requestFinalTranscript();
+    let finalTranscript = '';
+    try {
+      finalTranscript = await api.requestFinalTranscript() || '';
+    } catch (err) {
+      status.textContent = err.message || 'transcription failed';
+      status.style.display = 'block';
+    }
 
     // Wait briefly for final transcript, then stop STT
     setTimeout(() => api.stopSTT(), 2500);
 
     // Finalize the live bubble
     if (liveBubbleEl) {
-      const finalText = liveBubbleEl.textContent.trim();
+      const finalText = (finalTranscript || liveBubbleEl.textContent).trim();
       if (finalText && finalText !== 'listening…') {
+        liveBubbleEl.textContent = finalText;
         liveBubbleEl.style.opacity = '1';
         liveBubbleEl.style.fontStyle = 'normal';
         liveBubbleEl = null;

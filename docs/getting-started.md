@@ -79,8 +79,8 @@ cursor-buddy/
 │   └── services/           # Backend services
 │       ├── capture.js      # Screenshot capture via desktopCapturer
 │       ├── inference.js    # Multi-provider AI inference (Anthropic, OpenAI, Ollama, LM Studio)
-│       ├── transcription.js # Speech-to-text (AssemblyAI, Deepgram, OpenAI Whisper)
-│       ├── tts.js          # Text-to-speech (ElevenLabs, Cartesia)
+│       ├── transcription.js # Speech-to-text (AssemblyAI, Deepgram, OpenAI Whisper, Faster Whisper)
+│       ├── tts.js          # Text-to-speech (ElevenLabs, Cartesia, Piper)
 │       ├── mcp-server.js   # CursorBuddy as an MCP tool server
 │       ├── mcp-client.js   # Connect to external MCP servers
 │       ├── tool-loader.js  # Load custom tools from filesystem

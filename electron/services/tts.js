@@ -1,9 +1,14 @@
 /**
  * TTS Service
  *
- * Text-to-speech via ElevenLabs or Cartesia.
+ * Text-to-speech via ElevenLabs, Cartesia, or local Piper.
  * Returns audio data (Buffer) that the renderer plays via Web Audio.
  */
+
+const { spawn } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 // ── ElevenLabs ────────────────────────────────────────────
 
@@ -69,6 +74,75 @@ async function cartesiaSpeak(text, settings) {
   return { audioData: Buffer.from(arrayBuffer), mimeType: "audio/mpeg" };
 }
 
+// ── Piper (local/offline) ─────────────────────────────────
+
+async function piperSpeak(text, settings) {
+  const executable = settings.localPiperExecutable || "piper";
+  const modelPath = settings.localPiperModel;
+  if (!modelPath) throw new Error("Piper model path not configured");
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cursorbuddy-piper-"));
+  const outputPath = path.join(tempDir, "speech.wav");
+  const args = ["--model", modelPath, "--output_file", outputPath];
+
+  if (settings.localPiperConfig) {
+    args.push("--config", settings.localPiperConfig);
+  }
+  if (settings.localPiperSpeaker) {
+    args.push("--speaker", String(settings.localPiperSpeaker));
+  }
+  if (settings.localPiperLengthScale) {
+    args.push("--length_scale", String(settings.localPiperLengthScale));
+  }
+
+  try {
+    await runPiper(executable, args, text, Number(settings.localPiperTimeoutMs) || 60000);
+    return { audioData: fs.readFileSync(outputPath), mimeType: "audio/wav" };
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (_) {}
+  }
+}
+
+function runPiper(executable, args, text, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      stdio: ["pipe", "ignore", "pipe"],
+      windowsHide: true,
+    });
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill(); } catch (_) {}
+      reject(new Error("Piper timed out"));
+    }, timeoutMs);
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(stderr.trim() || `Piper exited with code ${code}`));
+      }
+    });
+    child.stdin.end(text);
+  });
+}
+
 // ── Public API ────────────────────────────────────────────
 
 async function speak(text, settings) {
@@ -80,6 +154,8 @@ async function speak(text, settings) {
       return elevenLabsSpeak(text, settings);
     case "cartesia":
       return cartesiaSpeak(text, settings);
+    case "piper":
+      return piperSpeak(text, settings);
     default:
       throw new Error(`Unknown TTS provider: ${provider}`);
   }

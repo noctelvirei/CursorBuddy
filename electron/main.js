@@ -556,8 +556,8 @@ ipcMain.on("stt:audio", (_event, pcm16ArrayBuffer) => {
   transcription.sendAudio(Buffer.from(pcm16ArrayBuffer));
 });
 
-ipcMain.on("stt:request-final", () => {
-  transcription.requestFinal();
+ipcMain.handle("stt:request-final", async () => {
+  return transcription.requestFinal();
 });
 
 ipcMain.on("stt:stop", () => {
@@ -887,13 +887,18 @@ function registerPushToTalk() {
 function stopPushToTalk() {
   if (!isPushToTalkActive) return;
   isPushToTalkActive = false;
-  transcription.requestFinal();
+  const finalTranscriptPromise = Promise.resolve(transcription.requestFinal()).then((text) => {
+    if (text) pttFinalTranscript = text;
+  }).catch((err) => {
+    console.error("[STT] Final transcript failed:", err.message);
+  });
   sendToOverlay("overlay-command", "cursor:set-voice-state", { state: "processing" });
   sendToOverlay("push-to-talk", "stop");
   sendToPanel("push-to-talk", "stop");
 
   // Wait for final transcript then run inference
   setTimeout(async () => {
+    await finalTranscriptPromise;
     transcription.stopSession();
     if (pttFinalTranscript.trim()) {
       log.event("ptt:inference", { transcript: pttFinalTranscript.slice(0, 80) });

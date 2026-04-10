@@ -24,7 +24,7 @@ Push-to-talk → Microphone → STT Provider → Transcript
 
 ## Speech-to-Text Providers
 
-CursorBuddy supports four STT backends, configurable in settings:
+CursorBuddy supports local and online STT backends, configurable in settings:
 
 ### AssemblyAI (default)
 
@@ -49,6 +49,15 @@ CursorBuddy supports four STT backends, configurable in settings:
 - **Audio format:** WAV (PCM16, 16kHz, mono)
 - **Behavior:** Buffers all audio during push-to-talk, uploads as WAV on release, returns final transcript
 - **Requires:** OpenAI API key
+
+### Faster Whisper (local)
+
+- **Model:** Any Faster Whisper model name or local model path, for example `base`, `small`, or a local CTranslate2 model directory
+- **Transport:** Local Python helper process
+- **Audio format:** WAV (PCM16, 16kHz, mono)
+- **Behavior:** Buffers all audio during push-to-talk, transcribes locally on release, returns final transcript
+- **Requires:** Python with `faster-whisper` installed (`pip install faster-whisper`)
+- **Settings:** Python executable, model, device, compute type, optional language
 
 ### Apple Speech
 
@@ -111,6 +120,14 @@ buddy.setVoiceState('responding');
 - **Model:** `sonic-2`
 - **Output:** MP3
 - **Requires:** Cartesia API key + voice ID
+
+### Piper (local)
+
+- **Model:** Local `.onnx` Piper voice model
+- **Transport:** Local Piper CLI process
+- **Output:** WAV
+- **Requires:** Piper installed locally and a voice model path configured
+- **Settings:** Piper executable, model path, optional config path and speaker id
 
 ---
 

@@ -49,7 +49,7 @@ contextBridge.exposeInMainWorld("panelAPI", {
   // STT (speech-to-text)
   startSTT: (provider) => ipcRenderer.invoke("stt:start", provider),
   sendAudio: (pcm16ArrayBuffer) => ipcRenderer.send("stt:audio", pcm16ArrayBuffer),
-  requestFinalTranscript: () => ipcRenderer.send("stt:request-final"),
+  requestFinalTranscript: () => ipcRenderer.invoke("stt:request-final"),
   stopSTT: () => ipcRenderer.send("stt:stop"),
   onTranscript: (callback) => {
     const handler = (_event, data) => callback(data);
