@@ -270,8 +270,8 @@ function runFasterWhisper(wavPath, settings) {
     scriptPath,
     "--audio", wavPath,
     "--model", settings.localWhisperModel || "base",
-    "--device", settings.localWhisperDevice || "auto",
-    "--compute-type", settings.localWhisperComputeType || "default",
+    "--device", settings.localWhisperDevice || "cpu",
+    "--compute-type", settings.localWhisperComputeType || "int8",
   ];
   if (settings.localWhisperLanguage) {
     args.push("--language", settings.localWhisperLanguage);

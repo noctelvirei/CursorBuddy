@@ -414,8 +414,8 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
           <div class="section-label">Faster Whisper Local Settings</div>
           <div class="field"><div class="field-label">Python executable <span class="hint">— python, py, or full path</span></div><input type="text" id="localWhisperPython" placeholder="python" data-key="localWhisperPython" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Model <span class="hint">— size or local model path</span></div><input type="text" id="localWhisperModel" placeholder="base" data-key="localWhisperModel" oninput="saveKey(this)"></div>
-          <div class="field"><div class="field-label">Device <span class="hint">— auto, cpu, cuda</span></div><input type="text" id="localWhisperDevice" placeholder="auto" data-key="localWhisperDevice" oninput="saveKey(this)"></div>
-          <div class="field"><div class="field-label">Compute type <span class="hint">— default, int8, float16</span></div><input type="text" id="localWhisperComputeType" placeholder="default" data-key="localWhisperComputeType" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Device <span class="hint">— cpu, cuda, auto</span></div><input type="text" id="localWhisperDevice" placeholder="cpu" data-key="localWhisperDevice" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">Compute type <span class="hint">— int8, float16, default</span></div><input type="text" id="localWhisperComputeType" placeholder="int8" data-key="localWhisperComputeType" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Language <span class="hint">— optional, e.g. en</span></div><input type="text" id="localWhisperLanguage" placeholder="auto detect" data-key="localWhisperLanguage" oninput="saveKey(this)"></div>
         </div>
         <div class="divider"></div>

@@ -10,8 +10,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--audio", required=True)
     parser.add_argument("--model", default="base")
-    parser.add_argument("--device", default="auto")
-    parser.add_argument("--compute-type", default="default")
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--compute-type", default="int8")
     parser.add_argument("--language", default="")
     args = parser.parse_args()
 

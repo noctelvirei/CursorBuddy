@@ -57,7 +57,7 @@ CursorBuddy supports local and online STT backends, configurable in settings:
 - **Audio format:** WAV (PCM16, 16kHz, mono)
 - **Behavior:** Buffers all audio during push-to-talk, transcribes locally on release, returns final transcript
 - **Requires:** Python with `faster-whisper` installed (`pip install faster-whisper`)
-- **Settings:** Python executable, model, device, compute type, optional language
+- **Settings:** Python executable, model, device, compute type, optional language. Defaults to CPU + int8 for reliable local startup.
 
 ### Apple Speech
 
