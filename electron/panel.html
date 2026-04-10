@@ -428,6 +428,7 @@ button.btn.active{background:var(--accent-bg,rgba(59,130,246,0.18));border-color
           </div>
           <div class="field"><div class="field-label">Device <span class="hint">— cpu, cuda, auto</span></div><input type="text" id="localWhisperDevice" placeholder="cpu" data-key="localWhisperDevice" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Compute type <span class="hint">— int8, float16, default</span></div><input type="text" id="localWhisperComputeType" placeholder="int8" data-key="localWhisperComputeType" oninput="saveKey(this)"></div>
+          <div class="field"><div class="field-label">CUDA DLL dirs <span class="hint">— optional ; separated PATH additions</span></div><input type="text" id="localWhisperDllDirs" placeholder="C:\\CUDA\\bin;C:\\torch\\lib" data-key="localWhisperDllDirs" oninput="saveKey(this)"></div>
           <div class="field"><div class="field-label">Language <span class="hint">— optional, e.g. en</span></div><input type="text" id="localWhisperLanguage" placeholder="auto detect" data-key="localWhisperLanguage" oninput="saveKey(this)"></div>
         </div>
         <div class="divider"></div>

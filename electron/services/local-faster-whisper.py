@@ -3,7 +3,25 @@
 
 import argparse
 import json
+import os
 import sys
+
+_DLL_DIRECTORY_HANDLES = []
+
+
+def add_windows_dll_search_paths() -> None:
+    """Make PATH directories visible to Python's Windows DLL loader."""
+    if os.name != "nt":
+        return
+
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory or not os.path.isdir(directory):
+            continue
+        try:
+            handle = os.add_dll_directory(directory)
+            _DLL_DIRECTORY_HANDLES.append(handle)
+        except (FileNotFoundError, OSError):
+            pass
 
 
 def main() -> int:
@@ -14,6 +32,8 @@ def main() -> int:
     parser.add_argument("--compute-type", default="int8")
     parser.add_argument("--language", default="")
     args = parser.parse_args()
+
+    add_windows_dll_search_paths()
 
     try:
         from faster_whisper import WhisperModel

@@ -276,12 +276,23 @@ function runFasterWhisper(wavPath, settings) {
   if (settings.localWhisperLanguage) {
     args.push("--language", settings.localWhisperLanguage);
   }
+  const env = { ...process.env };
+  if (settings.localWhisperDllDirs) {
+    const dllDirs = String(settings.localWhisperDllDirs)
+      .split(path.delimiter)
+      .map((dir) => dir.trim())
+      .filter(Boolean);
+    if (dllDirs.length > 0) {
+      const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
+      env[pathKey] = `${dllDirs.join(path.delimiter)}${path.delimiter}${env[pathKey] || ""}`;
+    }
+  }
 
   return new Promise((resolve, reject) => {
     execFile(
       python,
       args,
-      { timeout: Number(settings.localWhisperTimeoutMs) || 120000, windowsHide: true },
+      { env, timeout: Number(settings.localWhisperTimeoutMs) || 120000, windowsHide: true },
       (error, stdout, stderr) => {
         let payload = null;
         try {
