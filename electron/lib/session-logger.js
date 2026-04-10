@@ -29,6 +29,7 @@ const SESSION_ID = SESSION_START.toISOString().replace(/[:.]/g, "-").slice(0, 19
 const LOG_FILE = path.join(LOG_DIR, `session-${SESSION_ID}.jsonl`);
 
 let logStream = null;
+let loggingDisabled = false;
 let eventCounter = 0;
 let consoleBroken = false;
 
@@ -39,11 +40,14 @@ function ensureLogDir() {
 }
 
 function getStream() {
+  if (loggingDisabled) return null;
   if (!logStream) {
     ensureLogDir();
     logStream = fs.createWriteStream(LOG_FILE, { flags: "a" });
-    logStream.on("error", () => {
+    logStream.on("error", (err) => {
+      loggingDisabled = true;
       logStream = null;
+      safeConsole("error", "[Logger] Stream failed:", err.message);
     });
     // Write session header
     const header = {
@@ -56,9 +60,17 @@ function getStream() {
       electronVersion: process.versions.electron || "unknown",
       nodeVersion: process.version,
     };
-    logStream.write(JSON.stringify(header) + "\n");
+    writeLine(JSON.stringify(header));
   }
   return logStream;
+}
+
+function writeLine(line) {
+  const stream = getStream();
+  if (!stream) return;
+  if (!stream.write(line + "\n")) {
+    stream.once("drain", () => {});
+  }
 }
 
 /**
@@ -79,9 +91,10 @@ function event(type, data) {
 
   // Write to file
   try {
-    getStream().write(JSON.stringify(entry) + "\n");
+    writeLine(JSON.stringify(entry));
   } catch (err) {
     safeConsole("error", "[Logger] Write failed:", err.message);
+    loggingDisabled = true;
   }
 
   // Also log to console with compact format
