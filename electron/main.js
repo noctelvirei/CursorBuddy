@@ -28,6 +28,12 @@ const { loadSettings, saveSettings } = require("./lib/settings-cache.js");
 const { parsePointingCoordinates } = require("./lib/point-parser.js");
 const log = require("./lib/session-logger.js");
 
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on?.("error", (err) => {
+    if (err?.code !== "EPIPE" && err?.code !== "ERR_STREAM_DESTROYED") throw err;
+  });
+}
+
 codexAppServer.on("auth-state", (state) => {
   sendToPanel("codex:auth-state", state);
 });

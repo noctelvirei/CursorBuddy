@@ -30,6 +30,7 @@ const LOG_FILE = path.join(LOG_DIR, `session-${SESSION_ID}.jsonl`);
 
 let logStream = null;
 let eventCounter = 0;
+let consoleBroken = false;
 
 function ensureLogDir() {
   try {
@@ -41,6 +42,9 @@ function getStream() {
   if (!logStream) {
     ensureLogDir();
     logStream = fs.createWriteStream(LOG_FILE, { flags: "a" });
+    logStream.on("error", () => {
+      logStream = null;
+    });
     // Write session header
     const header = {
       _type: "session_start",
@@ -77,7 +81,7 @@ function event(type, data) {
   try {
     getStream().write(JSON.stringify(entry) + "\n");
   } catch (err) {
-    console.error("[Logger] Write failed:", err.message);
+    safeConsole("error", "[Logger] Write failed:", err.message);
   }
 
   // Also log to console with compact format
@@ -90,7 +94,20 @@ function event(type, data) {
       return `${k}=${JSON.stringify(v)}`;
     })
     .join(" ");
-  console.log(tag, compact);
+  safeConsole("log", tag, compact);
+}
+
+function safeConsole(method, ...args) {
+  if (consoleBroken) return;
+  try {
+    console[method](...args);
+  } catch (err) {
+    if (err?.code === "EPIPE" || err?.code === "ERR_STREAM_DESTROYED") {
+      consoleBroken = true;
+      return;
+    }
+    throw err;
+  }
 }
 
 /**
