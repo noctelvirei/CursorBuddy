@@ -685,9 +685,27 @@ ipcMain.handle("logs:list", () => {
     return files.map(f => ({ name: f, path: require("path").join(logDir, f) }));
   } catch (_) { return []; }
 });
+
+function resolveLogFilePath(filePath) {
+  if (typeof filePath !== "string" || !filePath.trim()) {
+    throw new Error("Invalid log path");
+  }
+
+  const logDir = path.resolve(log.getLogDir());
+  const resolvedPath = path.resolve(filePath);
+  const relativePath = path.relative(logDir, resolvedPath);
+  const isInsideLogDir = relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+
+  if (!isInsideLogDir || path.extname(resolvedPath) !== ".jsonl") {
+    throw new Error("Log path must point to a .jsonl file inside the session log directory");
+  }
+
+  return resolvedPath;
+}
+
 ipcMain.handle("logs:read", (_event, filePath) => {
   try {
-    return require("fs").readFileSync(filePath, "utf-8");
+    return require("fs").readFileSync(resolveLogFilePath(filePath), "utf-8");
   } catch (err) { return `Error: ${err.message}`; }
 });
 
